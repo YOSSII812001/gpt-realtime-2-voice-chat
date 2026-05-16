@@ -9,12 +9,18 @@
   <body>
     <main class="shell">
       <section class="panel">
+        <pre class="ascii-mark" aria-hidden="true">+-- GPT REALTIME NODE --------------------------------+
+  _/_/_/ _/_/_/_/  realtime voice terminal
+ _/      _/        model: gpt-realtime-2
+_/ _/_/ _/_/_/    input: mic | text | diagnostics
++----------------------------------------------------+</pre>
+
         <div class="status-row">
           <div>
-            <p class="eyebrow">OpenAI Realtime API</p>
-            <h1>GPT-Realtime-2 Voice Chat</h1>
+            <p class="eyebrow">/openai/realtime/webrtc</p>
+            <h1>GPT-Realtime-2<br />Voice Chat</h1>
           </div>
-          <div class="status-pill" id="statusPill">未接続</div>
+          <div class="status-pill" id="statusPill" data-testid="connection-status">未接続</div>
         </div>
 
         <div class="meter" aria-hidden="true">
@@ -24,6 +30,31 @@
           <span></span>
           <span></span>
         </div>
+
+        <div class="mic-monitor" id="micMonitor" aria-label="マイク入力ステータス">
+          <div class="mic-monitor-head">
+            <span>マイク入力</span>
+            <strong id="micStatusText" data-testid="mic-status">未接続</strong>
+          </div>
+          <div
+            class="mic-level-track"
+            id="micLevelMeter"
+            data-testid="mic-level-meter"
+            role="meter"
+            aria-label="マイク入力音量"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div class="mic-level-fill" id="micLevelFill"></div>
+          </div>
+          <div class="mic-level-footer">
+            <span id="micLevelText" data-testid="mic-level-text">0%</span>
+            <span>診断中または接続中にバーが動きます</span>
+          </div>
+        </div>
+
+        <div class="terminal-line" aria-hidden="true">user@local:~$ realtime --voice --model gpt-realtime-2</div>
 
         <div class="controls" aria-label="接続操作">
           <button class="primary" id="connectButton" type="button">接続</button>
@@ -45,7 +76,7 @@
 
       <section class="panel secondary-panel" aria-label="ログ">
         <div class="log-header">
-          <h2>イベント</h2>
+          <h2>EVENT STREAM</h2>
           <button id="clearLogButton" type="button">クリア</button>
         </div>
         <ol class="log" id="eventLog"></ol>

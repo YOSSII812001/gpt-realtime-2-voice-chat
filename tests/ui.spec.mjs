@@ -11,6 +11,9 @@ test.describe("GPT-Realtime-2 voice chat UI", () => {
     await expect(page.getByRole("button", { name: "切断" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "マイク停止" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "マイク診断" })).toBeEnabled();
+    await expect(page.getByTestId("mic-status")).toHaveText("未接続");
+    await expect(page.getByTestId("mic-level-meter")).toHaveAttribute("aria-valuenow", "0");
+    await expect(page.getByTestId("mic-level-text")).toHaveText("0%");
     await expect(page.getByPlaceholder("例: 今日の予定を相談したい")).toBeVisible();
     await expect(page.getByText("ready:")).toBeVisible();
 
@@ -27,6 +30,8 @@ test.describe("GPT-Realtime-2 voice chat UI", () => {
     await expect(page.getByRole("button", { name: "切断" })).toBeVisible();
     await expect(page.getByRole("button", { name: "マイク停止" })).toBeVisible();
     await expect(page.getByRole("button", { name: "マイク診断" })).toBeVisible();
+    await expect(page.getByTestId("mic-status")).toBeVisible();
+    await expect(page.getByTestId("mic-level-meter")).toBeVisible();
     await expect(page.getByPlaceholder("例: 今日の予定を相談したい")).toBeVisible();
 
     expect(consoleErrors).toEqual([]);
