@@ -18,6 +18,7 @@ const micLevelText = document.querySelector("#micLevelText");
 let peerConnection;
 let dataChannel;
 let localStream;
+let diagnosticStream;
 let micEnabled = true;
 let connectionMode = "voice";
 let micAudioContext;
@@ -40,6 +41,7 @@ setMicLevel(0, "未接続", "idle");
 logEvent("ready", "接続ボタンを押すとマイク許可の確認が表示されます。");
 
 async function connect() {
+  stopDiagnosticMic({ keepStatus: true });
   setBusy(true);
   setStatus("接続中");
 
@@ -124,6 +126,8 @@ async function connect() {
 }
 
 function disconnect(options = {}) {
+  stopDiagnosticMic({ keepStatus: true });
+
   if (dataChannel) {
     dataChannel.close();
     dataChannel = undefined;
@@ -178,6 +182,17 @@ function toggleMic() {
 }
 
 async function diagnoseMicrophone() {
+  if (diagnosticStream) {
+    stopDiagnosticMic();
+    logEvent("mic.check", "マイク診断を停止しました。");
+    return;
+  }
+
+  if (peerConnection && connectionMode === "voice" && localStream) {
+    logEvent("mic.check", "接続中はRealtime用マイク入力を監視中です。");
+    return;
+  }
+
   micDiagnosticButton.disabled = true;
   logEvent("mic.check", `secureContext=${window.isSecureContext}`);
 
@@ -202,21 +217,14 @@ async function diagnoseMicrophone() {
 
   try {
     const stream = await requestMicrophone({ allowFallback: false });
+    diagnosticStream = stream;
     const audioTracks = stream.getAudioTracks();
     logEvent("mic.getUserMedia", `OK: audioTracks=${audioTracks.length}`);
-    const sampleLevel = await sampleMicLevel(stream);
-    if (sampleLevel === null) {
-      setMicLevel(0, "診断OK", "active");
-      logEvent("mic.level", "音量サンプルは取得できませんでした。");
-    } else {
-      setMicLevel(sampleLevel, "診断OK", "active");
-      logEvent("mic.level", `${sampleLevel}%`);
-    }
+    await startMicLevelMonitor(stream);
+    micDiagnosticButton.textContent = "診断停止";
+    logEvent("mic.level", "入力メーターを開始しました。話すとバーが動きます。");
     for (const track of audioTracks) {
       logEvent("mic.track", `${track.label || "(label unavailable)"} / ${track.readyState}`);
-    }
-    for (const track of stream.getTracks()) {
-      track.stop();
     }
   } catch (error) {
     if (isPermissionDenied(error)) {
@@ -355,29 +363,6 @@ function stopMicLevelMonitor(options = {}) {
   }
 }
 
-async function sampleMicLevel(stream) {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) {
-    return null;
-  }
-
-  const context = new AudioContextClass();
-  if (context.state === "suspended") {
-    await context.resume();
-  }
-
-  const analyser = context.createAnalyser();
-  analyser.fftSize = 1024;
-  const data = new Uint8Array(analyser.fftSize);
-  const source = context.createMediaStreamSource(stream);
-  source.connect(analyser);
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  analyser.getByteTimeDomainData(data);
-  source.disconnect();
-  await context.close();
-  return calculateAudioLevel(data);
-}
-
 function calculateAudioLevel(data) {
   let sum = 0;
   for (const sample of data) {
@@ -386,7 +371,27 @@ function calculateAudioLevel(data) {
   }
 
   const rms = Math.sqrt(sum / data.length);
-  return Math.min(100, Math.round((rms / 64) * 100));
+  const adjusted = Math.max(0, rms - 1.5);
+  return Math.min(100, Math.round((adjusted / 24) * 100));
+}
+
+function stopDiagnosticMic(options = {}) {
+  if (!diagnosticStream) {
+    return;
+  }
+
+  for (const track of diagnosticStream.getTracks()) {
+    track.stop();
+  }
+  diagnosticStream = undefined;
+  micDiagnosticButton.textContent = "マイク診断";
+
+  if (!localStream) {
+    stopMicLevelMonitor({ keepStatus: options.keepStatus });
+    if (!options.keepStatus && !peerConnection) {
+      setMicLevel(0, "未接続", "idle");
+    }
+  }
 }
 
 function setMicLevel(level, status, state) {

@@ -1,6 +1,44 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("GPT-Realtime-2 live connection", () => {
+  test("shows a live microphone level during diagnostic monitoring", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        const context = new AudioContextClass();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const destination = context.createMediaStreamDestination();
+        oscillator.frequency.value = 440;
+        gain.gain.value = 0.35;
+        oscillator.connect(gain);
+        gain.connect(destination);
+        oscillator.start();
+        window.__testMicContext = context;
+        window.__testMicOscillator = oscillator;
+        return destination.stream;
+      };
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "マイク診断" }).click();
+
+    await expect(page.getByText("mic.getUserMedia:")).toBeVisible();
+    await expect(page.getByText(/OK: audioTracks=\d+/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "診断停止" })).toBeEnabled();
+    await expect
+      .poll(async () => Number(await page.getByTestId("mic-level-meter").getAttribute("aria-valuenow")))
+      .toBeGreaterThan(0);
+    await expect(page.getByTestId("mic-level-text")).not.toHaveText("0%");
+
+    await page.getByRole("button", { name: "診断停止" }).click();
+    await expect(page.getByTestId("mic-status")).toHaveText("未接続");
+
+    expect(consoleErrors).toEqual([]);
+  });
+
   test("connects with a fake microphone and enables realtime controls", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
 
@@ -8,7 +46,7 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await page.getByRole("button", { name: "マイク診断" }).click();
     await expect(page.getByText("mic.getUserMedia:")).toBeVisible();
     await expect(page.getByText(/OK: audioTracks=\d+/)).toBeVisible();
-    await expect(page.getByTestId("mic-status")).toHaveText("診断OK");
+    await expect(page.getByTestId("mic-status")).not.toHaveText("権限拒否");
     await expect(page.getByTestId("mic-level-meter")).toHaveAttribute("aria-valuenow", /\d+/);
 
     await page.getByRole("button", { name: "接続" }).click();
