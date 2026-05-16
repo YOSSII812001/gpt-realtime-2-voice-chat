@@ -8,6 +8,8 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await page.getByRole("button", { name: "マイク診断" }).click();
     await expect(page.getByText("mic.getUserMedia:")).toBeVisible();
     await expect(page.getByText(/OK: audioTracks=\d+/)).toBeVisible();
+    await expect(page.getByTestId("mic-status")).toHaveText("診断OK");
+    await expect(page.getByTestId("mic-level-meter")).toHaveAttribute("aria-valuenow", /\d+/);
 
     await page.getByRole("button", { name: "接続" }).click();
 
@@ -16,13 +18,14 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await expect(page.getByRole("button", { name: "切断" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "マイク停止" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "送信" })).toBeEnabled();
+    await expect(page.getByTestId("mic-status")).not.toHaveText("権限拒否");
 
     await page.getByPlaceholder("例: 今日の予定を相談したい").fill("短く一言で返事してください。");
     await page.getByRole("button", { name: "送信" }).click();
     await expect(page.getByText("user:")).toBeVisible();
 
     await page.getByRole("button", { name: "切断" }).click();
-    await expect(page.getByText("未接続")).toBeVisible();
+    await expect(page.getByTestId("connection-status")).toHaveText("未接続");
 
     expect(consoleErrors).toEqual([]);
   });
@@ -40,6 +43,8 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await page.getByRole("button", { name: "マイク診断" }).click();
     await expect(page.getByText("mic.getUserMedia:")).toBeVisible();
     await expect(page.getByText("NotAllowedError: マイク権限が拒否されました。")).toBeVisible();
+    await expect(page.getByTestId("mic-status")).toHaveText("権限拒否");
+    await expect(page.getByTestId("mic-level-text")).toHaveText("0%");
 
     await page.getByRole("button", { name: "接続" }).click();
 
@@ -47,6 +52,7 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await expect(page.getByText("Realtimeイベントチャネルが開きました。")).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("button", { name: "マイクなし" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "送信" })).toBeEnabled();
+    await expect(page.getByTestId("mic-status")).toHaveText("権限拒否");
 
     expect(consoleErrors).toEqual([]);
   });

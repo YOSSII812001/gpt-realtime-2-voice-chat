@@ -9,12 +9,22 @@ const textInput = document.querySelector("#textInput");
 const statusPill = document.querySelector("#statusPill");
 const eventLog = document.querySelector("#eventLog");
 const remoteAudio = document.querySelector("#remoteAudio");
+const micMonitor = document.querySelector("#micMonitor");
+const micStatusText = document.querySelector("#micStatusText");
+const micLevelMeter = document.querySelector("#micLevelMeter");
+const micLevelFill = document.querySelector("#micLevelFill");
+const micLevelText = document.querySelector("#micLevelText");
 
 let peerConnection;
 let dataChannel;
 let localStream;
 let micEnabled = true;
 let connectionMode = "voice";
+let micAudioContext;
+let micAnalyser;
+let micSource;
+let micLevelFrame;
+let micLevelData;
 
 connectButton.addEventListener("click", connect);
 disconnectButton.addEventListener("click", disconnect);
@@ -26,6 +36,7 @@ clearLogButton.addEventListener("click", () => {
 textForm.addEventListener("submit", sendTextMessage);
 
 setStatus("未接続");
+setMicLevel(0, "未接続", "idle");
 logEvent("ready", "接続ボタンを押すとマイク許可の確認が表示されます。");
 
 async function connect() {
@@ -58,9 +69,11 @@ async function connect() {
       for (const track of localStream.getTracks()) {
         peerConnection.addTrack(track, localStream);
       }
+      await startMicLevelMonitor(localStream);
     } else {
       connectionMode = "text";
       peerConnection.addTransceiver("audio", { direction: "recvonly" });
+      setMicLevel(0, "権限拒否", "denied");
       logEvent("mic", "マイク権限が拒否されたため、テキスト入力と音声応答のみで接続します。");
       logEvent("mic", "音声入力にはブラウザ側で localhost:3000 のマイク許可が必要です。");
     }
@@ -128,6 +141,7 @@ function disconnect(options = {}) {
     localStream = undefined;
   }
 
+  stopMicLevelMonitor();
   remoteAudio.srcObject = null;
   micEnabled = true;
   connectionMode = "voice";
@@ -137,6 +151,7 @@ function disconnect(options = {}) {
   micButton.disabled = true;
   micButton.textContent = "マイク停止";
   sendButton.disabled = true;
+  setMicLevel(0, "未接続", "idle");
   if (!options.keepStatus) {
     setStatus("未接続");
   }
@@ -154,6 +169,11 @@ function toggleMic() {
   }
 
   micButton.textContent = micEnabled ? "マイク停止" : "マイク再開";
+  if (!micEnabled) {
+    setMicLevel(0, "ミュート中", "muted");
+  } else {
+    setMicLevel(0, "入力待機", "active");
+  }
   logEvent("mic", micEnabled ? "マイク入力を再開しました。" : "マイク入力を停止しました。");
 }
 
@@ -184,6 +204,14 @@ async function diagnoseMicrophone() {
     const stream = await requestMicrophone({ allowFallback: false });
     const audioTracks = stream.getAudioTracks();
     logEvent("mic.getUserMedia", `OK: audioTracks=${audioTracks.length}`);
+    const sampleLevel = await sampleMicLevel(stream);
+    if (sampleLevel === null) {
+      setMicLevel(0, "診断OK", "active");
+      logEvent("mic.level", "音量サンプルは取得できませんでした。");
+    } else {
+      setMicLevel(sampleLevel, "診断OK", "active");
+      logEvent("mic.level", `${sampleLevel}%`);
+    }
     for (const track of audioTracks) {
       logEvent("mic.track", `${track.label || "(label unavailable)"} / ${track.readyState}`);
     }
@@ -191,6 +219,9 @@ async function diagnoseMicrophone() {
       track.stop();
     }
   } catch (error) {
+    if (isPermissionDenied(error)) {
+      setMicLevel(0, "権限拒否", "denied");
+    }
     logEvent("mic.getUserMedia", `${error?.name || "Error"}: ${formatError(error)}`);
   }
 
@@ -255,6 +286,121 @@ async function requestMicrophone(options = {}) {
       return null;
     }
     throw error;
+  }
+}
+
+async function startMicLevelMonitor(stream) {
+  stopMicLevelMonitor({ keepStatus: true });
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    setMicLevel(0, "音量計非対応", "active");
+    logEvent("mic.level", "このブラウザはAudioContextに対応していません。");
+    return;
+  }
+
+  micAudioContext = new AudioContextClass();
+  if (micAudioContext.state === "suspended") {
+    await micAudioContext.resume();
+  }
+
+  micAnalyser = micAudioContext.createAnalyser();
+  micAnalyser.fftSize = 1024;
+  micLevelData = new Uint8Array(micAnalyser.fftSize);
+  micSource = micAudioContext.createMediaStreamSource(stream);
+  micSource.connect(micAnalyser);
+  setMicLevel(0, "入力待機", "active");
+
+  const update = () => {
+    if (!micAnalyser || !micLevelData) {
+      return;
+    }
+
+    if (!micEnabled) {
+      setMicLevel(0, "ミュート中", "muted");
+      micLevelFrame = requestAnimationFrame(update);
+      return;
+    }
+
+    micAnalyser.getByteTimeDomainData(micLevelData);
+    const level = calculateAudioLevel(micLevelData);
+    setMicLevel(level, level > 2 ? "入力中" : "入力待機", "active");
+    micLevelFrame = requestAnimationFrame(update);
+  };
+
+  update();
+}
+
+function stopMicLevelMonitor(options = {}) {
+  if (micLevelFrame) {
+    cancelAnimationFrame(micLevelFrame);
+    micLevelFrame = undefined;
+  }
+
+  if (micSource) {
+    micSource.disconnect();
+    micSource = undefined;
+  }
+
+  micAnalyser = undefined;
+  micLevelData = undefined;
+
+  if (micAudioContext) {
+    micAudioContext.close().catch(() => {});
+    micAudioContext = undefined;
+  }
+
+  if (!options.keepStatus) {
+    setMicLevel(0, "未接続", "idle");
+  }
+}
+
+async function sampleMicLevel(stream) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+
+  const context = new AudioContextClass();
+  if (context.state === "suspended") {
+    await context.resume();
+  }
+
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  const data = new Uint8Array(analyser.fftSize);
+  const source = context.createMediaStreamSource(stream);
+  source.connect(analyser);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  analyser.getByteTimeDomainData(data);
+  source.disconnect();
+  await context.close();
+  return calculateAudioLevel(data);
+}
+
+function calculateAudioLevel(data) {
+  let sum = 0;
+  for (const sample of data) {
+    const centered = sample - 128;
+    sum += centered * centered;
+  }
+
+  const rms = Math.sqrt(sum / data.length);
+  return Math.min(100, Math.round((rms / 64) * 100));
+}
+
+function setMicLevel(level, status, state) {
+  const normalized = Math.max(0, Math.min(100, Math.round(level)));
+  micLevelFill.style.width = `${normalized}%`;
+  micLevelText.textContent = `${normalized}%`;
+  micLevelMeter.setAttribute("aria-valuenow", String(normalized));
+
+  if (status) {
+    micStatusText.textContent = status;
+  }
+
+  if (state) {
+    micMonitor.dataset.state = state;
   }
 }
 
