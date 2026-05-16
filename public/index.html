@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GPT-Realtime-2 Voice Chat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <div class="status-row">
+          <div>
+            <p class="eyebrow">OpenAI Realtime API</p>
+            <h1>GPT-Realtime-2 Voice Chat</h1>
+          </div>
+          <div class="status-pill" id="statusPill">未接続</div>
+        </div>
+
+        <div class="meter" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        <div class="controls" aria-label="接続操作">
+          <button class="primary" id="connectButton" type="button">接続</button>
+          <button id="disconnectButton" type="button" disabled>切断</button>
+          <button id="micButton" type="button" disabled>マイク停止</button>
+          <button id="micDiagnosticButton" type="button">マイク診断</button>
+        </div>
+
+        <form class="text-form" id="textForm">
+          <label for="textInput">テキストでも送信</label>
+          <div class="input-row">
+            <input id="textInput" name="textInput" autocomplete="off" placeholder="例: 今日の予定を相談したい" />
+            <button type="submit" disabled id="sendButton">送信</button>
+          </div>
+        </form>
+
+        <audio id="remoteAudio" autoplay></audio>
+      </section>
+
+      <section class="panel secondary-panel" aria-label="ログ">
+        <div class="log-header">
+          <h2>イベント</h2>
+          <button id="clearLogButton" type="button">クリア</button>
+        </div>
+        <ol class="log" id="eventLog"></ol>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
