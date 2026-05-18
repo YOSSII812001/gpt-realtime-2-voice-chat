@@ -29,6 +29,7 @@ body {
   background-size: 22px 22px, 22px 22px, auto, auto;
   color: var(--ink);
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  -webkit-text-size-adjust: 100%;
 }
 
 body::before {
@@ -60,6 +61,7 @@ button {
   color: var(--ink);
   cursor: pointer;
   box-shadow: inset 0 0 0 1px rgba(232, 255, 247, 0.03);
+  touch-action: manipulation;
 }
 
 button::before {
@@ -199,12 +201,21 @@ h2 {
   border-color: rgba(69, 255, 188, 0.72);
   background: rgba(69, 255, 188, 0.08);
   color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(69, 255, 188, 0.16), 0 0 24px rgba(69, 255, 188, 0.18);
 }
 
 .status-pill.error {
   border-color: rgba(255, 92, 122, 0.58);
   background: rgba(255, 92, 122, 0.08);
   color: var(--danger);
+}
+
+.lead-copy {
+  max-width: 620px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: clamp(0.86rem, 1.8vw, 1rem);
+  line-height: 1.65;
 }
 
 .meter {
@@ -224,8 +235,10 @@ h2 {
   border-radius: 0;
   background: var(--accent);
   transform-origin: center;
-  opacity: 0.34;
-  box-shadow: 0 0 18px rgba(69, 255, 188, 0.25);
+  opacity: 0.18;
+  transform: scaleY(0.62);
+  animation: none;
+  box-shadow: none;
 }
 
 .meter span::after {
@@ -234,6 +247,8 @@ h2 {
 
 .connected-state .meter span {
   animation: pulse 1.1s steps(5, end) infinite;
+  opacity: 0.34;
+  box-shadow: 0 0 18px rgba(69, 255, 188, 0.25);
 }
 
 .connected-state .meter span:nth-child(2),
@@ -272,6 +287,15 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.mic-mode-badge {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .mic-monitor-head span,
@@ -318,6 +342,35 @@ h2 {
   color: var(--danger);
 }
 
+.mic-monitor[data-state="active"] {
+  border-color: rgba(69, 255, 188, 0.58);
+  background: rgba(69, 255, 188, 0.045);
+}
+
+.mic-monitor[data-state="active"] .mic-mode-badge {
+  border-color: rgba(69, 255, 188, 0.66);
+  background: rgba(69, 255, 188, 0.12);
+  color: var(--accent);
+}
+
+.mic-monitor[data-state="muted"] {
+  border-color: rgba(255, 209, 102, 0.62);
+  background: rgba(255, 209, 102, 0.06);
+}
+
+.mic-monitor[data-state="muted"] .mic-mode-badge,
+.mic-monitor[data-state="muted"] .mic-monitor-head strong {
+  border-color: rgba(255, 209, 102, 0.72);
+  background: rgba(255, 209, 102, 0.12);
+  color: var(--gold);
+}
+
+.mic-monitor[data-state="denied"] .mic-mode-badge {
+  border-color: rgba(255, 92, 122, 0.72);
+  background: rgba(255, 92, 122, 0.12);
+  color: var(--danger);
+}
+
 .terminal-line {
   border: 1px solid var(--border);
   margin-bottom: 14px;
@@ -327,6 +380,25 @@ h2 {
   font-size: 0.82rem;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-guide {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border: 1px dashed rgba(69, 255, 188, 0.36);
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: rgba(69, 255, 188, 0.055);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.quick-guide strong {
+  color: var(--accent);
   white-space: nowrap;
 }
 
@@ -412,6 +484,7 @@ h2 {
   .shell {
     grid-template-columns: 1fr;
     align-items: start;
+    min-height: auto;
   }
 
   .secondary-panel {
@@ -424,17 +497,33 @@ h2 {
 }
 
 @media (max-width: 560px) {
+  body {
+    background-size: 18px 18px, 18px 18px, auto, auto;
+  }
+
   .shell {
-    width: min(100% - 18px, 1180px);
-    padding: 9px 0;
+    width: 100%;
+    gap: 10px;
+    padding: 0;
   }
 
   .panel {
-    padding: 18px;
+    border-left: 0;
+    border-right: 0;
+    padding: 16px;
   }
 
   .ascii-mark {
-    font-size: 0.62rem;
+    display: none;
+  }
+
+  .eyebrow {
+    font-size: 0.7rem;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 14vw, 3.2rem);
+    line-height: 0.98;
   }
 
   .status-row,
@@ -444,12 +533,82 @@ h2 {
     align-items: flex-start;
   }
 
-  .controls button,
-  .input-row button {
-    flex: 1 1 100%;
+  .status-pill {
+    width: 100%;
+    text-align: left;
+  }
+
+  .meter {
+    height: 92px;
+    margin: 18px 0 14px;
+    gap: 8px;
+  }
+
+  .meter span {
+    width: 12px;
+    height: 34px;
+  }
+
+  .mic-monitor {
+    margin-bottom: 14px;
+    padding: 12px;
+  }
+
+  .terminal-line {
+    display: none;
+  }
+
+  .quick-guide {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    font-size: 0.86rem;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .controls button {
+    width: 100%;
+    min-height: 52px;
+    padding: 0 10px;
+    font-size: 0.92rem;
   }
 
   .input-row {
     flex-direction: column;
+  }
+
+  .input-row input,
+  .input-row button {
+    width: 100%;
+    min-height: 52px;
+  }
+
+  .input-row input {
+    font-size: 16px;
+  }
+
+  .secondary-panel {
+    min-height: auto;
+  }
+
+  .log-header {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .log {
+    height: 240px;
+    margin-top: 12px;
+    font-size: 0.84rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .controls {
+    grid-template-columns: 1fr;
   }
 }

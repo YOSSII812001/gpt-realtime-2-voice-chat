@@ -28,6 +28,7 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await expect(page.getByText("mic.getUserMedia:")).toBeVisible();
     await expect(page.getByText(/OK: audioTracks=\d+/)).toBeVisible();
     await expect(page.getByRole("button", { name: "診断停止" })).toBeEnabled();
+    await expect(page.getByTestId("mic-mode")).toHaveText("マイクON");
     await expect
       .poll(async () => Number(await page.getByTestId("mic-level-meter").getAttribute("aria-valuenow")))
       .toBeGreaterThan(0);
@@ -56,9 +57,22 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await expect(page.getByRole("button", { name: "切断" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "マイク停止" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "送信" })).toBeEnabled();
+    await expect(page.getByTestId("connection-status")).toHaveText("接続済み");
+    await expect(page.locator("body")).toHaveClass(/connected-state/);
+    await expect(page.locator(".meter span").first()).not.toHaveCSS("animation-name", "none");
     await expect(page.getByTestId("mic-status")).not.toHaveText("権限拒否");
+    await expect(page.getByTestId("mic-mode")).toHaveText("マイクON");
 
-    await page.getByPlaceholder("例: 今日の予定を相談したい").fill("短く一言で返事してください。");
+    await page.getByRole("button", { name: "マイク停止" }).click();
+    await expect(page.getByRole("button", { name: "マイク再開" })).toBeEnabled();
+    await expect(page.getByTestId("mic-status")).toHaveText("停止中");
+    await expect(page.getByTestId("mic-mode")).toHaveText("マイクOFF");
+
+    await page.getByRole("button", { name: "マイク再開" }).click();
+    await expect(page.getByRole("button", { name: "マイク停止" })).toBeEnabled();
+    await expect(page.getByTestId("mic-mode")).toHaveText("マイクON");
+
+    await page.getByPlaceholder("例: 山田太郎さんが10時に入居、記入者は佐藤").fill("山田太郎さんが10時に入居、記入者は佐藤です。");
     await page.getByRole("button", { name: "送信" }).click();
     await expect(page.getByText("user:")).toBeVisible();
 
@@ -91,6 +105,7 @@ test.describe("GPT-Realtime-2 live connection", () => {
     await expect(page.getByRole("button", { name: "マイクなし" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "送信" })).toBeEnabled();
     await expect(page.getByTestId("mic-status")).toHaveText("権限拒否");
+    await expect(page.getByTestId("mic-mode")).toHaveText("マイク利用不可");
 
     expect(consoleErrors).toEqual([]);
   });

@@ -14,6 +14,7 @@ const micStatusText = document.querySelector("#micStatusText");
 const micLevelMeter = document.querySelector("#micLevelMeter");
 const micLevelFill = document.querySelector("#micLevelFill");
 const micLevelText = document.querySelector("#micLevelText");
+const micModeBadge = document.querySelector("#micModeBadge");
 
 let peerConnection;
 let dataChannel;
@@ -26,6 +27,7 @@ let micAnalyser;
 let micSource;
 let micLevelFrame;
 let micLevelData;
+const handledFunctionCalls = new Set();
 
 connectButton.addEventListener("click", connect);
 disconnectButton.addEventListener("click", disconnect);
@@ -37,7 +39,7 @@ clearLogButton.addEventListener("click", () => {
 textForm.addEventListener("submit", sendTextMessage);
 
 setStatus("未接続");
-setMicLevel(0, "未接続", "idle");
+setMicLevel(0, "未接続", "idle", "マイク未接続");
 logEvent("ready", "接続ボタンを押すとマイク許可の確認が表示されます。");
 
 async function connect() {
@@ -57,7 +59,7 @@ async function connect() {
       logEvent("peer", `WebRTC: ${peerConnection.connectionState}`);
       if (peerConnection.connectionState === "connected") {
         document.body.classList.add("connected-state");
-        setStatus("接続中", "connected");
+        setStatus("接続済み", "connected");
       }
       if (["failed", "closed", "disconnected"].includes(peerConnection.connectionState)) {
         document.body.classList.remove("connected-state");
@@ -75,7 +77,7 @@ async function connect() {
     } else {
       connectionMode = "text";
       peerConnection.addTransceiver("audio", { direction: "recvonly" });
-      setMicLevel(0, "権限拒否", "denied");
+      setMicLevel(0, "権限拒否", "denied", "マイク利用不可");
       logEvent("mic", "マイク権限が拒否されたため、テキスト入力と音声応答のみで接続します。");
       logEvent("mic", "音声入力にはブラウザ側で localhost:3000 のマイク許可が必要です。");
     }
@@ -114,7 +116,7 @@ async function connect() {
     disconnectButton.disabled = false;
     micButton.disabled = connectionMode !== "voice";
     micButton.textContent = connectionMode === "voice" ? "マイク停止" : "マイクなし";
-    setStatus("接続中", "connected");
+    setStatus("接続済み", "connected");
     logEvent("session", "GPT-Realtime-2セッションを開始しました。");
   } catch (error) {
     logEvent("error", formatError(error));
@@ -155,7 +157,7 @@ function disconnect(options = {}) {
   micButton.disabled = true;
   micButton.textContent = "マイク停止";
   sendButton.disabled = true;
-  setMicLevel(0, "未接続", "idle");
+  setMicLevel(0, "未接続", "idle", "マイク未接続");
   if (!options.keepStatus) {
     setStatus("未接続");
   }
@@ -174,9 +176,9 @@ function toggleMic() {
 
   micButton.textContent = micEnabled ? "マイク停止" : "マイク再開";
   if (!micEnabled) {
-    setMicLevel(0, "ミュート中", "muted");
+    setMicLevel(0, "停止中", "muted", "マイクOFF");
   } else {
-    setMicLevel(0, "入力待機", "active");
+    setMicLevel(0, "入力待機", "active", "マイクON");
   }
   logEvent("mic", micEnabled ? "マイク入力を再開しました。" : "マイク入力を停止しました。");
 }
@@ -228,7 +230,7 @@ async function diagnoseMicrophone() {
     }
   } catch (error) {
     if (isPermissionDenied(error)) {
-      setMicLevel(0, "権限拒否", "denied");
+      setMicLevel(0, "権限拒否", "denied", "マイク利用不可");
     }
     logEvent("mic.getUserMedia", `${error?.name || "Error"}: ${formatError(error)}`);
   }
@@ -271,10 +273,12 @@ function sendGreeting() {
   sendRealtimeEvent({
     type: "response.create",
     response: {
-      instructions: "短く日本語で挨拶し、マイクに話しかけてよいことを伝えてください。"
+      instructions:
+        "短く日本語で挨拶し、入退居記録を音声またはテキストで受け付けられることを伝えてください。例: 山田太郎さんが10時に入居、記入者は佐藤。"
     }
   });
 }
+
 
 function sendRealtimeEvent(event) {
   dataChannel.send(JSON.stringify(event));
@@ -302,7 +306,7 @@ async function startMicLevelMonitor(stream) {
 
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
-    setMicLevel(0, "音量計非対応", "active");
+    setMicLevel(0, "音量計非対応", "active", "マイクON");
     logEvent("mic.level", "このブラウザはAudioContextに対応していません。");
     return;
   }
@@ -317,22 +321,22 @@ async function startMicLevelMonitor(stream) {
   micLevelData = new Uint8Array(micAnalyser.fftSize);
   micSource = micAudioContext.createMediaStreamSource(stream);
   micSource.connect(micAnalyser);
-  setMicLevel(0, "入力待機", "active");
+  setMicLevel(0, "入力待機", "active", "マイクON");
 
   const update = () => {
     if (!micAnalyser || !micLevelData) {
       return;
     }
 
-    if (!micEnabled) {
-      setMicLevel(0, "ミュート中", "muted");
+  if (!micEnabled) {
+      setMicLevel(0, "停止中", "muted", "マイクOFF");
       micLevelFrame = requestAnimationFrame(update);
       return;
     }
 
     micAnalyser.getByteTimeDomainData(micLevelData);
     const level = calculateAudioLevel(micLevelData);
-    setMicLevel(level, level > 2 ? "入力中" : "入力待機", "active");
+    setMicLevel(level, level > 2 ? "入力中" : "入力待機", "active", "マイクON");
     micLevelFrame = requestAnimationFrame(update);
   };
 
@@ -359,7 +363,7 @@ function stopMicLevelMonitor(options = {}) {
   }
 
   if (!options.keepStatus) {
-    setMicLevel(0, "未接続", "idle");
+    setMicLevel(0, "未接続", "idle", "マイク未接続");
   }
 }
 
@@ -389,12 +393,12 @@ function stopDiagnosticMic(options = {}) {
   if (!localStream) {
     stopMicLevelMonitor({ keepStatus: options.keepStatus });
     if (!options.keepStatus && !peerConnection) {
-      setMicLevel(0, "未接続", "idle");
+      setMicLevel(0, "未接続", "idle", "マイク未接続");
     }
   }
 }
 
-function setMicLevel(level, status, state) {
+function setMicLevel(level, status, state, modeText) {
   const normalized = Math.max(0, Math.min(100, Math.round(level)));
   micLevelFill.style.width = `${normalized}%`;
   micLevelText.textContent = `${normalized}%`;
@@ -406,6 +410,10 @@ function setMicLevel(level, status, state) {
 
   if (state) {
     micMonitor.dataset.state = state;
+  }
+
+  if (modeText) {
+    micModeBadge.textContent = modeText;
   }
 }
 
@@ -432,7 +440,7 @@ async function logAudioDevices(stage) {
   }
 }
 
-function handleServerEvent(message) {
+async function handleServerEvent(message) {
   const event = JSON.parse(message.data);
 
   if (event.type === "error") {
@@ -450,7 +458,18 @@ function handleServerEvent(message) {
     return;
   }
 
+  if (event.type === "response.output_item.done" && event.item?.type === "function_call") {
+    await handleFunctionCall(event.item);
+    return;
+  }
+
   if (event.type === "response.done") {
+    for (const item of event.response?.output || []) {
+      if (item?.type === "function_call") {
+        await handleFunctionCall(item);
+      }
+    }
+
     const usage = event.response?.usage;
     const summary = usage
       ? `完了 input=${usage.input_tokens ?? "-"} output=${usage.output_tokens ?? "-"} total=${usage.total_tokens ?? "-"}`
@@ -468,6 +487,63 @@ function handleServerEvent(message) {
   ) {
     logEvent(event.type, "OK");
   }
+}
+
+async function handleFunctionCall(item) {
+  if (item.name !== "record_residency_entry") {
+    return;
+  }
+
+  const callId = item.call_id || item.id;
+  if (!callId || handledFunctionCalls.has(callId)) {
+    return;
+  }
+  handledFunctionCalls.add(callId);
+
+  let args;
+  try {
+    args = JSON.parse(item.arguments || "{}");
+  } catch (error) {
+    args = {};
+  }
+
+  logEvent("tool.call", `入退居記録: ${JSON.stringify(args)}`);
+
+  let output;
+  try {
+    const response = await fetch("/entries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(args)
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.detail || result.error || `HTTP ${response.status}`);
+    }
+    output = { ok: true, entry: result.entry, updatedRange: result.result?.updates?.updatedRange };
+    logEvent("sheets.append", `${result.entry.name} を追記しました (${output.updatedRange || "range unknown"})`);
+  } catch (error) {
+    output = { ok: false, error: formatError(error) };
+    logEvent("sheets.error", output.error);
+  }
+
+  sendRealtimeEvent({
+    type: "conversation.item.create",
+    item: {
+      type: "function_call_output",
+      call_id: callId,
+      output: JSON.stringify(output)
+    }
+  });
+
+  sendRealtimeEvent({
+    type: "response.create",
+    response: {
+      instructions: output.ok
+        ? "記録が完了したことを日本語で短く伝え、記録内容を復唱してください。"
+        : "記録に失敗したことを日本語で短く伝え、必要な設定や入力を案内してください。"
+    }
+  });
 }
 
 async function readError(response) {
